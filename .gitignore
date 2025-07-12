@@ -1,0 +1,60 @@
+# .gitignore
+
+# -----------------------------------------------------------------------------
+# Secrets & Environment Variables - CRITICAL
+# Never commit your .env file. It contains your secret bot token.
+# -----------------------------------------------------------------------------
+.env
+
+
+# -----------------------------------------------------------------------------
+# Database and Log Files
+# These files are generated at runtime and should not be part of the source.
+# -----------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+
+# -----------------------------------------------------------------------------
+# Python Specific Files
+# Ignore compiled Python files and cache directories.
+# -----------------------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# -----------------------------------------------------------------------------
+# Virtual Environments
+# Ignore virtual environment folders, as dependencies should be managed
+# via a requirements.txt file instead.
+# -----------------------------------------------------------------------------
+venv/
+.venv/
+env/
+*env/
+env.bak/
+venv.bak/
+
+
+# -----------------------------------------------------------------------------
+# IDE / Editor Configuration
+# Ignore personal editor settings.
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+
+# -----------------------------------------------------------------------------
+# Operating System Generated Files
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+
+credentials.json
