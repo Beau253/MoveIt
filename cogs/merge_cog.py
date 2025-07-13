@@ -112,7 +112,6 @@ class MergeCog(commands.Cog):
             
             final_message = f"✅ Successfully merged **{moved_count}** message(s) from `#{source_channel_name}` into {target.mention}."
             if delete_source: final_message += f"\n\nThe `#{source_channel_name}` channel has been deleted."
-            await interaction.followup.send(final_message, ephemeral=True)
             await target.send(f"✅ This channel has been successfully merged with `#{source_channel_name}` by {interaction.user.mention}.")
             
             log_embed = discord.Embed(title="Channel Merge Complete", color=discord.Color.orange(), description=f"**Moderator:** {interaction.user.mention}\n**Source:** `#{source_channel_name}`\n**Target:** {target.mention}\n**Messages Moved:** {moved_count}", timestamp=discord.utils.utcnow())
