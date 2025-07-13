@@ -31,10 +31,7 @@ async def log_to_audit_channel(bot, guild_id, log_message):
 class MoveQueueCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.add_to_queue_context_menu = app_commands.ContextMenu(
-            name='Add to Move Queue',
-            callback=self.context_menu_callback,
-        )
+        self.add_to_queue_context_menu = app_commands.ContextMenu(name='Add to Move Queue', callback=self.context_menu_callback)
         self.bot.tree.add_command(self.add_to_queue_context_menu)
 
     async def cog_check(self, interaction: discord.Interaction) -> bool:
