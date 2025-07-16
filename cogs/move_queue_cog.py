@@ -4,12 +4,14 @@ import os
 import discord
 import asqlite
 import asyncio
+import io
 from discord import app_commands, abc as discord_abc
 from discord.ext import commands
 
 # --- Load environment variables needed ---
 DB_PATH = os.getenv('DB_PATH')
 
+MAX_ATTACHMENT_SIZE = 7 * 1024 * 1024
 # --- This dictionary stores (channel_id, message_id) tuples ---
 move_queue = {}
 
@@ -146,17 +148,26 @@ class MoveQueueCog(commands.Cog):
                 return
 
         for message in original_messages:
-            content_with_attachments = message.content
-            if message.attachments:
-                urls = "\n".join([f"**Attachment:** {att.url}" for att in message.attachments])
-                content_with_attachments += f"\n\n{urls}"
             
+            files_to_send = []
+            content_with_links = message.content
+
+            if message.attachments:
+                for attachment in message.attachments:
+                    if attachment.size > MAX_ATTACHMENT_SIZE:
+                        content_with_links += f"\n\n**(Attachment too large to move:** `{attachment.filename}`\n{attachment.url} **)**"
+                    else:
+                        buffer = io.BytesIO(await attachment.read())
+                        files_to_send.append(discord.File(buffer, filename=attachment.filename))
+
             send_kwargs = {
-                'content': content_with_attachments,
+                'content': content_with_links,
                 'username': message.author.display_name,
                 'avatar_url': message.author.display_avatar.url,
-                'embeds': message.embeds
+                'embeds': message.embeds,
+                'files': files_to_send
             }
+            
             if isinstance(destination, discord.Thread):
                 send_kwargs['thread'] = destination
             
