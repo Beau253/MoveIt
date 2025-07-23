@@ -46,7 +46,7 @@ class MergeCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def _execute_merge(self, interaction: discord.Interaction, source: discord.TextChannel, target: discord.TextChannel, delete_source: bool):
+    async def _execute_merge(self, interaction: discord.Interaction, source: discord.TextChannel, target: discord.TextChannel, delete_source: bool, thread_name: str = None):
         source_channel_name = source.name
         try:
             all_messages = [message async for message in source.history(limit=None, oldest_first=True)]
@@ -54,10 +54,26 @@ class MergeCog(commands.Cog):
                 await interaction.followup.send("Source channel is empty.", ephemeral=True)
                 return
             
+            destination = target
+            if thread_name:
+                if not isinstance(target, (discord.TextChannel, discord.ForumChannel)):
+                    await interaction.followup.send("❌ You can only create threads in a normal text channel or a forum.", ephemeral=True)
+                    return
+                try:
+                    destination = await target.create_thread(
+                        name=thread_name,
+                        type=discord.ChannelType.public_thread,
+                        reason=f"Merged from #{source.name} by {interaction.user}"
+                    )
+                except discord.Forbidden:
+                    await interaction.followup.send(f"❌ I don't have permission to create a thread in {target.mention}.", ephemeral=True)
+                    return
+
+            # Webhook is always created in the parent channel
             webhooks = await target.webhooks()
             webhook = discord.utils.get(webhooks, name="MoveIt") or await target.create_webhook(name="MoveIt")
             moved_count = 0
-            
+
             for i, message in enumerate(all_messages):
                 try:
                     # Define the message state as a tuple for pattern matching
@@ -69,7 +85,7 @@ class MergeCog(commands.Cog):
                             quote_embed = discord.Embed(description=message.content, timestamp=message.created_at)
                             quote_embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
                             quote_embed.set_footer(text=f"Original message from #{source_channel_name}")
-                            await target.send(embeds=[quote_embed] + message.embeds)
+                            await destination.send(embeds=[quote_embed] + message.embeds)
                             moved_count += 1
 
                         # Case 2: A regular user message with any combination of content, embeds, or attachments
@@ -84,13 +100,18 @@ class MergeCog(commands.Cog):
                                         buffer = io.BytesIO(await attachment.read())
                                         files_to_send.append(discord.File(buffer, filename=attachment.filename))
                             
-                            await webhook.send(
-                                content=content_with_links,
-                                username=message.author.display_name,
-                                avatar_url=message.author.display_avatar.url,
-                                embeds=message.embeds,
-                                files=files_to_send
-                            )
+                            send_kwargs = {
+                                'content': content_with_links,
+                                'username': message.author.display_name,
+                                'avatar_url': message.author.display_avatar.url,
+                                'embeds': message.embeds,
+                                'files': files_to_send
+                            }
+                            
+                            if isinstance(destination, discord.Thread):
+                                send_kwargs['thread'] = destination
+                            
+                            await webhook.send(**send_kwargs)
                             moved_count += 1
                         
                         # Case 3 (Default): An unsendable message (e.g., sticker).
@@ -110,31 +131,39 @@ class MergeCog(commands.Cog):
             if delete_source:
                 await source.delete(reason=f"Merged into #{target.name} by {interaction.user}")
             
-            final_message = f"✅ Successfully merged **{moved_count}** message(s) from `#{source_channel_name}` into {target.mention}."
+            final_destination = destination.mention
+            final_message = f"✅ Successfully merged **{moved_count}** message(s) from `#{source_channel_name}` into {final_destination}."
             if delete_source: final_message += f"\n\nThe `#{source_channel_name}` channel has been deleted."
-            await target.send(f"✅ This channel has been successfully merged with `#{source_channel_name}` by {interaction.user.mention}.")
+
+            # This followup is sent to the user who ran the command, and the previous one is edited.
+            await interaction.followup.send(final_message, ephemeral=True)
+
+            # This message is sent to the destination channel/thread
+            await destination.send(f"✅ This channel/thread has been successfully merged with `#{source_channel_name}` by {interaction.user.mention}.")
             
-            log_embed = discord.Embed(title="Channel Merge Complete", color=discord.Color.orange(), description=f"**Moderator:** {interaction.user.mention}\n**Source:** `#{source_channel_name}`\n**Target:** {target.mention}\n**Messages Moved:** {moved_count}", timestamp=discord.utils.utcnow())
+            log_embed = discord.Embed(title="Channel Merge Complete", color=discord.Color.orange(), description=f"**Moderator:** {interaction.user.mention}\n**Source:** `#{source_channel_name}`\n**Target:** {final_destination}\n**Messages Moved:** {moved_count}", timestamp=discord.utils.utcnow())
             log_embed.set_footer(text="MoveIt Audit Log")
             await log_to_audit_channel(self.bot, interaction.guild.id, log_embed)
         except Exception as e:
             await interaction.followup.send(f"An unexpected error occurred during merge setup: `{e}`", ephemeral=True)
 
     @app_commands.command(name="merge", description="[ADMIN ONLY] Moves all messages from a source channel to a target channel.")
-    @app_commands.describe(source_channel="The channel to move messages FROM.", target_channel="The channel to move messages TO.", delete_source_channel="[DANGEROUS] Delete the source channel after the merge? (Default: False)")
+    @app_commands.describe(source_channel="The channel to move messages FROM.", target_channel="The channel to move messages TO.", delete_source_channel="[DANGEROUS] Delete the source channel after the merge? (Default: False)", thread_name="[OPTIONAL] Create a new thread for these messages.")
     @app_commands.checks.has_permissions(administrator=True)
-    async def merge_command(self, interaction: discord.Interaction, source_channel: discord.TextChannel, target_channel: discord.TextChannel, delete_source_channel: bool = False):
+    async def merge_command(self, interaction: discord.Interaction, source_channel: discord.TextChannel, target_channel: discord.TextChannel, delete_source_channel: bool = False, thread_name: str = None):
         if source_channel.id == target_channel.id:
             await interaction.response.send_message("❌ Source and target channels cannot be the same.", ephemeral=True)
             return
         view = ConfirmView(interaction.user)
         confirmation_message = f"**⚠️ You are about to merge all messages from `#{source_channel.name}` into `#{target_channel.name}`.**\n\nThis action is **irreversible**.\n\n"
         if delete_source_channel: confirmation_message += f"**DANGER:** You have also chosen to **DELETE** the `#{source_channel.name}` channel after the merge."
+        if thread_name:
+            confirmation_message += f"\n\nA new public thread named **'{thread_name}'** will be created in `#{target_channel.name}` to contain the merged messages."
         await interaction.response.send_message(confirmation_message, view=view, ephemeral=True)
         await view.wait()
         if view.value is True:
             await view.interaction.followup.send("Merge confirmed. This may take a long time for large channels. Please be patient.", ephemeral=True)
-            await self._execute_merge(interaction, source_channel, target_channel, delete_source_channel)
+            await self._execute_merge(interaction, source_channel, target_channel, delete_source_channel, thread_name)
         elif view.value is False:
             await interaction.followup.send("Merge cancelled.", ephemeral=True)
         else:

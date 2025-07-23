@@ -79,9 +79,16 @@ class SplitCog(commands.Cog):
             
         destination = target_channel
         if thread_name:
+            if not isinstance(target_channel, (discord.TextChannel, discord.ForumChannel)):
+                await interaction.followup.send("❌ You can only create threads in a normal text channel or a forum.", ephemeral=True)
+                return
             try:
-                destination = await target_channel.create_thread(name=thread_name, reason=f"Split by {interaction.user}")
-            except:
+                destination = await target_channel.create_thread(
+                    name=thread_name,
+                    type=discord.ChannelType.public_thread,
+                    reason=f"Split by {interaction.user}"
+                )
+            except discord.Forbidden:
                 await interaction.followup.send("❌ I can't create threads in that channel.", ephemeral=True)
                 return
         

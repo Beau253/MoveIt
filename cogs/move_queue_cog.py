@@ -142,7 +142,11 @@ class MoveQueueCog(commands.Cog):
                 await interaction.followup.send("❌ You can only create threads in a normal text channel or a forum.", ephemeral=True)
                 return
             try:
-                destination = await target_channel.create_thread(name=thread_name, reason=f"Moved by {interaction.user}")
+                destination = await target_channel.create_thread(
+                    name=thread_name, 
+                    type=discord.ChannelType.public_thread, 
+                    reason=f"Moved by {interaction.user}"
+                )
             except discord.Forbidden:
                 await interaction.followup.send("❌ I don't have permission to create threads in that channel.", ephemeral=True)
                 return
